@@ -5,9 +5,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 
-# ---------- Setup ----------
 EMAIL = os.environ.get("CHRONO_EMAIL")
 PWD = os.environ.get("CHRONO_PWD")
 
@@ -17,62 +15,51 @@ date_str = saturday.strftime("%Y-%m-%d")
 club_url = f"https://www.chronogolf.com/club/miami-beach-golf-club?date={date_str}"
 
 options = Options()
-# options.add_argument("--headless")  # REMOVE for debugging/viewing browser
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
+# Do NOT set --user-data-dir
 
 driver = webdriver.Chrome(options=options)
 wait = WebDriverWait(driver, 15)
 
-# ---------- Login ----------
+# --- Login ---
 driver.get("https://www.chronogolf.com/login")
 time.sleep(2)
 driver.find_element(By.ID, "sessionEmail").send_keys(EMAIL)
 driver.find_element(By.ID, "sessionPassword").send_keys(PWD)
 driver.find_element(By.XPATH, "//input[@type='submit' and @value='Log in']").click()
-time.sleep(3)  # Wait for login to complete
+time.sleep(3)
 
-# ---------- Search for Tee Time ----------
+# --- Load Tee Times ---
 driver.get(club_url)
-
-# Wait for tee times to load (wait until "AM"/"PM" appears in page)
 wait.until(lambda d: "AM" in d.page_source or "PM" in d.page_source)
 
-# Save the HTML to inspect it
+# Save HTML for manual inspection
 with open("tee_times_page_source.html", "w", encoding="utf-8") as f:
     f.write(driver.page_source)
-print("Saved page source after loading tee times. Please inspect this file manually to compare with what you see in your browser.")
+print("Saved tee times page source for debugging.")
 
-# Find all buttons on the page and print their text
+# Print out all button texts for debugging selectors
 tee_time_buttons = driver.find_elements(By.TAG_NAME, "button")
-print("All button texts on tee times page:")
-for btn in tee_time_buttons:
-    print(repr(btn.text))
+print("All button texts found:")
+for b in tee_time_buttons:
+    print(repr(b.text))
 
-# Filter for tee time buttons specifically
+# Apply your selection logic to clickable tee times
 available_cards = []
 for btn in tee_time_buttons:
-    if (
-        btn.is_displayed()
-        and btn.is_enabled()
-        and ("PM" in btn.text or "AM" in btn.text)
-        and len(btn.text.strip()) > 2
-    ):
+    if btn.is_displayed() and btn.is_enabled() and ("AM" in btn.text or "PM" in btn.text) and len(btn.text.strip()) > 2:
         available_cards.append(btn)
-
 if not available_cards:
-    print("No available tee times found (per script). Use button print, page source, or browser view to debug why!")
+    print("No available tee times found according to script.")
     driver.quit()
     exit()
-
 first_card = available_cards[0]
-print(f"First available tee time button says: {first_card.text}")
+print(f"First available tee time found: {first_card.text}")
 first_card.click()
-print("Clicked first available tee time card.")
 time.sleep(2)
 
-# The rest of your booking flow goes here...
-# ---------- Select 18 Holes ----------
+# --- Select 18 Holes ---
 hole_buttons = driver.find_elements(By.CSS_SELECTOR, "button[type='button'][role='radio']")
 for button in hole_buttons:
     if button.get_attribute("value") == "18":
@@ -81,7 +68,7 @@ for button in hole_buttons:
         break
 time.sleep(1)
 
-# ---------- Select 4 Players (if possible) ----------
+# --- Select 4 Players (if possible) ---
 player_buttons = driver.find_elements(By.CSS_SELECTOR, "button.e5zz781.e5zz780.e5zz782")
 if player_buttons:
     add_button = player_buttons[0]
@@ -89,4 +76,53 @@ if player_buttons:
         if add_button.is_enabled():
             add_button.click()
             time.sleep(0.5)
-            print(f"Clicked Reserve button!")
+            print(f"Clicked to select player #{i+2}")
+        else:
+            print(f"Button disabled after {i+2} players (max available players selected).")
+            break
+else:
+    print("Could not find player add button.")
+time.sleep(1)
+
+# --- Reserve Button ---
+try:
+    reserve_button = driver.find_element(By.XPATH, "//button[span[contains(text(),'Reserve')] or contains(text(),'Reserve')]")
+    if reserve_button.is_enabled():
+        reserve_button.click()
+        print("Clicked Reserve button!")
+    else:
+        print("Reserve button is disabled.")
+except Exception:
+    try:
+        reserve_span = driver.find_element(By.XPATH, "//span[contains(text(), 'Reserve')]")
+        reserve_span.click()
+        print("Clicked Reserve span!")
+    except Exception as e:
+        print("Reserve button not found:", e)
+time.sleep(2)
+
+# --- Accept Terms and Conditions ---
+try:
+    terms_checkbox = driver.find_element(By.CSS_SELECTOR, "input[type='checkbox'][ng-model='vm.acceptTermsAndConditions']")
+    if not terms_checkbox.is_selected():
+        terms_checkbox.click()
+        print("Accepted terms and conditions!")
+    else:
+        print("Checkbox already checked.")
+except Exception as e:
+    print("Could not find or click the terms and conditions checkbox:", e)
+time.sleep(1)
+
+# --- Confirm Reservation ---
+try:
+    confirm_button = driver.find_element(By.XPATH, "//button[contains(text(),'Confirm Reservation')]")
+    if confirm_button.is_enabled():
+        confirm_button.click()
+        print("Clicked Confirm Reservation!")
+    else:
+        print("Button is disabled and cannot be clicked.")
+except Exception as e:
+    print("Could not find or click Confirm Reservation button:", e)
+time.sleep(3)
+
+driver.quit()
