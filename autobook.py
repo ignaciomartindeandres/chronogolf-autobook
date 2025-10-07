@@ -19,7 +19,12 @@ if not EMAIL or not PWD:
 today = datetime.date.today()
 saturday = today + datetime.timedelta((5 - today.weekday()) % 7)
 date_str = saturday.strftime("%Y-%m-%d")
-club_url = f"https://www.chronogolf.com/club/miami-beach-golf-club?date={date_str}"
+
+# Direct tee-time URL ensures correct React view loads
+club_url = (
+    f"https://www.chronogolf.com/club/miami-beach-golf-club"
+    f"?date={date_str}&step=teetimes&holes=&coursesIds=&deals=false&groupSize=0"
+)
 
 # --- Chrome setup ---
 tmpdir = tempfile.mkdtemp()
@@ -27,7 +32,7 @@ options = Options()
 options.add_argument(f"--user-data-dir={tmpdir}")
 options.add_argument(f"--data-path={os.path.join(tmpdir, 'data-path')}")
 options.add_argument(f"--disk-cache-dir={os.path.join(tmpdir, 'cache-dir')}")
-options.add_argument("--headless=new")  # comment out for local visual debugging
+options.add_argument("--headless=new")  # comment out for local testing
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
 options.add_argument("--disable-gpu")
@@ -36,7 +41,7 @@ options.add_argument("--disable-features=VizDisplayCompositor")
 driver = None
 try:
     driver = webdriver.Chrome(options=options)
-    wait = WebDriverWait(driver, 20)
+    wait = WebDriverWait(driver, 25)
 
     # --- LOGIN ---
     driver.get("https://www.chronogolf.com/login")
@@ -46,9 +51,12 @@ try:
     wait.until(EC.url_contains("chronogolf.com"))
     print("✅ Logged in successfully.")
 
-    # --- LOAD TEE TIMES ---
-    driver.get(club_url)
+    # --- LOAD TEE TIMES PAGE ---
     print(f"⏳ Loading tee times for {date_str} ...")
+    # Two-step navigation ensures session is authenticated before loading times
+    driver.get(f"https://www.chronogolf.com/club/miami-beach-golf-club?date={date_str}")
+    time.sleep(2)
+    driver.get(club_url)
 
     try:
         wait.until(
@@ -56,29 +64,22 @@ try:
                 (By.XPATH, "//button[contains(., 'AM') or contains(., 'PM')]")
             )
         )
-        time.sleep(2)  # grace delay for full render
+        time.sleep(2)  # small grace delay
         print("✅ Tee time buttons detected.")
     except Exception:
         print("⚠️ Tee time buttons not detected — page may still be loading.")
 
-    # Save HTML + screenshot for debugging
+    # --- Save for debugging ---
     driver.save_screenshot("page_after_load.png")
     with open("tee_times_page_source.html", "w", encoding="utf-8") as f:
         f.write(driver.page_source)
     print("🧩 Saved HTML + screenshot for debugging.")
 
-    # --- Parse buttons ---
+    # --- FIND AVAILABLE TIMES ---
     tee_time_buttons = driver.find_elements(By.TAG_NAME, "button")
-    print("🔍 All button texts found:")
-    for b in tee_time_buttons:
-        if b.text.strip():
-            print(repr(b.text))
-
     available_cards = [
-        btn for btn in tee_time_buttons
-        if btn.is_displayed() and btn.is_enabled()
-        and ("AM" in btn.text or "PM" in btn.text)
-        and len(btn.text.strip()) > 2
+        b for b in tee_time_buttons
+        if b.is_displayed() and b.is_enabled() and ("AM" in b.text or "PM" in b.text)
     ]
 
     if not available_cards:
@@ -106,7 +107,7 @@ try:
         player_buttons = driver.find_elements(By.CSS_SELECTOR, "button.e5zz781.e5zz780.e5zz782")
         if player_buttons:
             add_button = player_buttons[0]
-            for i in range(3):  # Add up to 4 players total
+            for i in range(3):
                 if add_button.is_enabled():
                     add_button.click()
                     time.sleep(0.3)
@@ -144,7 +145,9 @@ try:
     # --- CONFIRM RESERVATION ---
     try:
         confirm_button = wait.until(
-            EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Confirm Reservation')]"))
+            EC.element_to_be_clickable(
+                (By.XPATH, "//button[contains(text(),'Confirm Reservation')]")
+            )
         )
         confirm_button.click()
         print("🎉 Confirmed reservation!")
@@ -156,7 +159,8 @@ try:
 
 except Exception as main_error:
     print("❌ Fatal error:", main_error)
-    driver.save_screenshot("error_screenshot.png")
+    if driver:
+        driver.save_screenshot("error_screenshot.png")
     exit(1)
 
 finally:
