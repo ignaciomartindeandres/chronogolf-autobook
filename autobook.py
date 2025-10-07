@@ -27,7 +27,7 @@ options = Options()
 options.add_argument(f"--user-data-dir={tmpdir}")
 options.add_argument(f"--data-path={os.path.join(tmpdir, 'data-path')}")
 options.add_argument(f"--disk-cache-dir={os.path.join(tmpdir, 'cache-dir')}")
-options.add_argument("--headless=new")
+options.add_argument("--headless=new")  # comment out for local visual debugging
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
 options.add_argument("--disable-gpu")
@@ -36,7 +36,7 @@ options.add_argument("--disable-features=VizDisplayCompositor")
 driver = None
 try:
     driver = webdriver.Chrome(options=options)
-    wait = WebDriverWait(driver, 15)
+    wait = WebDriverWait(driver, 20)
 
     # --- LOGIN ---
     driver.get("https://www.chronogolf.com/login")
@@ -44,23 +44,41 @@ try:
     driver.find_element(By.ID, "sessionPassword").send_keys(PWD)
     driver.find_element(By.XPATH, "//input[@type='submit' and @value='Log in']").click()
     wait.until(EC.url_contains("chronogolf.com"))
+    print("✅ Logged in successfully.")
 
     # --- LOAD TEE TIMES ---
     driver.get(club_url)
-    wait.until(lambda d: "AM" in d.page_source or "PM" in d.page_source)
+    print(f"⏳ Loading tee times for {date_str} ...")
 
+    try:
+        wait.until(
+            EC.presence_of_all_elements_located(
+                (By.XPATH, "//button[contains(., 'AM') or contains(., 'PM')]")
+            )
+        )
+        time.sleep(2)  # grace delay for full render
+        print("✅ Tee time buttons detected.")
+    except Exception:
+        print("⚠️ Tee time buttons not detected — page may still be loading.")
+
+    # Save HTML + screenshot for debugging
+    driver.save_screenshot("page_after_load.png")
     with open("tee_times_page_source.html", "w", encoding="utf-8") as f:
         f.write(driver.page_source)
-    print("✅ Saved tee times page source for debugging.")
+    print("🧩 Saved HTML + screenshot for debugging.")
 
+    # --- Parse buttons ---
     tee_time_buttons = driver.find_elements(By.TAG_NAME, "button")
     print("🔍 All button texts found:")
     for b in tee_time_buttons:
-        print(repr(b.text))
+        if b.text.strip():
+            print(repr(b.text))
 
     available_cards = [
         btn for btn in tee_time_buttons
-        if btn.is_displayed() and btn.is_enabled() and ("AM" in btn.text or "PM" in btn.text) and len(btn.text.strip()) > 2
+        if btn.is_displayed() and btn.is_enabled()
+        and ("AM" in btn.text or "PM" in btn.text)
+        and len(btn.text.strip()) > 2
     ]
 
     if not available_cards:
@@ -73,7 +91,11 @@ try:
 
     # --- SELECT 18 HOLES ---
     try:
-        hole_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button[type='button'][role='radio'][value='18']")))
+        hole_button = wait.until(
+            EC.element_to_be_clickable(
+                (By.CSS_SELECTOR, "button[type='button'][role='radio'][value='18']")
+            )
+        )
         hole_button.click()
         print("✅ Selected 18 holes.")
     except Exception:
@@ -84,7 +106,7 @@ try:
         player_buttons = driver.find_elements(By.CSS_SELECTOR, "button.e5zz781.e5zz780.e5zz782")
         if player_buttons:
             add_button = player_buttons[0]
-            for i in range(3):
+            for i in range(3):  # Add up to 4 players total
                 if add_button.is_enabled():
                     add_button.click()
                     time.sleep(0.3)
@@ -97,7 +119,9 @@ try:
     # --- RESERVE BUTTON ---
     try:
         reserve_button = wait.until(
-            EC.element_to_be_clickable((By.XPATH, "//button[span[contains(text(),'Reserve')] or contains(text(),'Reserve')]"))
+            EC.element_to_be_clickable(
+                (By.XPATH, "//button[span[contains(text(),'Reserve')] or contains(text(),'Reserve')]")
+            )
         )
         reserve_button.click()
         print("✅ Clicked Reserve button.")
@@ -107,7 +131,9 @@ try:
     # --- ACCEPT TERMS ---
     try:
         terms_checkbox = wait.until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, "input[type='checkbox'][ng-model='vm.acceptTermsAndConditions']"))
+            EC.element_to_be_clickable(
+                (By.CSS_SELECTOR, "input[type='checkbox'][ng-model='vm.acceptTermsAndConditions']")
+            )
         )
         if not terms_checkbox.is_selected():
             terms_checkbox.click()
@@ -125,8 +151,13 @@ try:
     except Exception as e:
         print(f"⚠️ Confirm button not found or disabled: {e}")
 
+    print("✅ Script completed successfully.")
+    exit(0)
+
 except Exception as main_error:
     print("❌ Fatal error:", main_error)
+    driver.save_screenshot("error_screenshot.png")
+    exit(1)
 
 finally:
     if driver:
