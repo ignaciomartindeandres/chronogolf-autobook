@@ -1,31 +1,48 @@
-name: ChronoGolf Autobook
+name: Auto Book Tee Time
 
 on:
   schedule:
-    # Runs every Monday at 00:01am EST (4:01am UTC)
-    - cron:  '1 4 * * 1'
-  workflow_dispatch:
+    # Every Monday at 04:01 UTC = 00:01 AM Eastern (approx 10s after midnight local)
+    - cron: '1 4 * * 1'
+  workflow_dispatch:  # allow manual run
 
 jobs:
-  run-script:
+  book:
     runs-on: ubuntu-latest
+
     env:
       CHRONO_EMAIL: ${{ secrets.CHRONO_EMAIL }}
       CHRONO_PWD: ${{ secrets.CHRONO_PWD }}
+
     steps:
-      - name: Checkout your code
-        uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-      - name: Install Selenium & Chrome
+
+      - name: Install dependencies
         run: |
+          python -m pip install --upgrade pip
           pip install selenium
-          wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-          sudo apt install ./google-chrome-stable_current_amd64.deb -y
-      - name: Set up Chromedriver
+
+      - name: Install Chrome & Chromedriver
         uses: nanasess/setup-chromedriver@v2
 
-      - name: Run auto-booker
+      - name: Wait 10 seconds for tee times to open
+        run: sleep 10
+
+      - name: Run booking script
         run: python autobook.py
+
+      - name: Upload debug artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-artifacts
+          path: |
+            tee_times_page_source.html
+            page_after_load.png
+            error_screenshot.png
