@@ -1,6 +1,7 @@
 import os
 import time
 import datetime
+import tempfile
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
@@ -17,7 +18,8 @@ club_url = f"https://www.chronogolf.com/club/miami-beach-golf-club?date={date_st
 options = Options()
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
-# Do NOT set --user-data-dir
+# Always use a unique profile directory for every run (avoids all session/create errors)
+options.add_argument(f"--user-data-dir={tempfile.mkdtemp()}")
 
 driver = webdriver.Chrome(options=options)
 wait = WebDriverWait(driver, 15)
@@ -34,32 +36,33 @@ time.sleep(3)
 driver.get(club_url)
 wait.until(lambda d: "AM" in d.page_source or "PM" in d.page_source)
 
-# Save HTML for manual inspection
+# Save HTML for debugging
 with open("tee_times_page_source.html", "w", encoding="utf-8") as f:
     f.write(driver.page_source)
 print("Saved tee times page source for debugging.")
 
-# Print out all button texts for debugging selectors
+# Print all button texts for debugging
 tee_time_buttons = driver.find_elements(By.TAG_NAME, "button")
 print("All button texts found:")
 for b in tee_time_buttons:
     print(repr(b.text))
 
-# Apply your selection logic to clickable tee times
+# Select available tee time card (first AM/PM button)
 available_cards = []
 for btn in tee_time_buttons:
     if btn.is_displayed() and btn.is_enabled() and ("AM" in btn.text or "PM" in btn.text) and len(btn.text.strip()) > 2:
         available_cards.append(btn)
 if not available_cards:
-    print("No available tee times found according to script.")
+    print("No available tee times found.")
     driver.quit()
     exit()
+
 first_card = available_cards[0]
-print(f"First available tee time found: {first_card.text}")
+print(f"First available tee time: {first_card.text}")
 first_card.click()
 time.sleep(2)
 
-# --- Select 18 Holes ---
+# --- Select 18 holes ---
 hole_buttons = driver.find_elements(By.CSS_SELECTOR, "button[type='button'][role='radio']")
 for button in hole_buttons:
     if button.get_attribute("value") == "18":
@@ -68,7 +71,7 @@ for button in hole_buttons:
         break
 time.sleep(1)
 
-# --- Select 4 Players (if possible) ---
+# --- Select 4 players (if possible) ---
 player_buttons = driver.find_elements(By.CSS_SELECTOR, "button.e5zz781.e5zz780.e5zz782")
 if player_buttons:
     add_button = player_buttons[0]
@@ -84,7 +87,7 @@ else:
     print("Could not find player add button.")
 time.sleep(1)
 
-# --- Reserve Button ---
+# --- Reserve button ---
 try:
     reserve_button = driver.find_element(By.XPATH, "//button[span[contains(text(),'Reserve')] or contains(text(),'Reserve')]")
     if reserve_button.is_enabled():
@@ -101,7 +104,7 @@ except Exception:
         print("Reserve button not found:", e)
 time.sleep(2)
 
-# --- Accept Terms and Conditions ---
+# --- Accept terms ---
 try:
     terms_checkbox = driver.find_element(By.CSS_SELECTOR, "input[type='checkbox'][ng-model='vm.acceptTermsAndConditions']")
     if not terms_checkbox.is_selected():
@@ -113,7 +116,7 @@ except Exception as e:
     print("Could not find or click the terms and conditions checkbox:", e)
 time.sleep(1)
 
-# --- Confirm Reservation ---
+# --- Confirm reservation ---
 try:
     confirm_button = driver.find_element(By.XPATH, "//button[contains(text(),'Confirm Reservation')]")
     if confirm_button.is_enabled():
