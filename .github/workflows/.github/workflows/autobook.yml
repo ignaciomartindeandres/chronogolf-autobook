@@ -1,0 +1,35 @@
+name: ChronoGolf Autobook
+
+on:
+  schedule:
+    # Runs every Monday at 00:01am EST (4:01am UTC)
+    - cron:  '1 4 * * 1'
+  workflow_dispatch:
+
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+    env:
+      CHRONO_EMAIL: ${{ secrets.CHRONO_EMAIL }}
+      CHRONO_PWD: ${{ secrets.CHRONO_PWD }}
+    steps:
+      - name: Checkout your code
+        uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install Selenium & Chrome
+        run: |
+          pip install selenium
+          wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo apt install ./google-chrome-stable_current_amd64.deb -y
+      - name: Set up Chromedriver
+        run: |
+          CHROME_VERSION=$(google-chrome --version | awk '{ print $3 }' | cut -d'.' -f1)
+          wget -N https://chromedriver.storage.googleapis.com/${CHROME_VERSION}/chromedriver_linux64.zip
+          unzip chromedriver_linux64.zip
+          sudo mv chromedriver /usr/local/bin/
+          sudo chmod +x /usr/local/bin/chromedriver
+      - name: Run auto-booker
+        run: python autobook.py
