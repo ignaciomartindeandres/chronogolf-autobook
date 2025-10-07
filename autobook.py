@@ -63,7 +63,7 @@ try:
     tee_time_cards = []
     for _ in range(5):  # retry 5 times
         try:
-            tee_time_cards = driver.find_elements(By.CSS_SELECTOR, '[data-testid="tee-time-card"]')
+            tee_time_cards = driver.find_elements(By.CSS_SELECTOR, '[data-testid="teeTimeCard"]')
             tee_time_cards = [c for c in tee_time_cards if c.is_displayed()]
             if tee_time_cards:
                 break
