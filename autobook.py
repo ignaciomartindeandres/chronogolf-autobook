@@ -28,8 +28,8 @@ driver.get("https://www.chronogolf.com/login")
 
 # Step 2: Enter login details
 time.sleep(2)
-driver.find_element(By.ID, "user_email").send_keys(EMAIL)
-driver.find_element(By.ID, "user_password").send_keys(PWD)
+driver.find_element(By.ID, "sessionEmail").send_keys(EMAIL)
+driver.find_element(By.ID, "sessionPassword").send_keys(PWD)
 driver.find_element(By.NAME, "commit").click()
 
 time.sleep(3)  # Wait for login
