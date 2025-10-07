@@ -89,4 +89,4 @@ if player_buttons:
         if add_button.is_enabled():
             add_button.click()
             time.sleep(0.5)
-            print(f"Clicked
+            print(f"Clicked Reserve button!")
