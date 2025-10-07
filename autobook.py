@@ -20,7 +20,6 @@ today = datetime.date.today()
 saturday = today + datetime.timedelta((5 - today.weekday()) % 7)
 date_str = saturday.strftime("%Y-%m-%d")
 
-# Direct tee-time URL ensures correct React view loads
 club_url = (
     f"https://www.chronogolf.com/club/miami-beach-golf-club"
     f"?date={date_str}&step=teetimes&holes=&coursesIds=&deals=false&groupSize=0"
@@ -32,7 +31,7 @@ options = Options()
 options.add_argument(f"--user-data-dir={tmpdir}")
 options.add_argument(f"--data-path={os.path.join(tmpdir, 'data-path')}")
 options.add_argument(f"--disk-cache-dir={os.path.join(tmpdir, 'cache-dir')}")
-options.add_argument("--headless=new")  # comment out for local testing
+options.add_argument("--headless=chrome")  # change to False for local debugging
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
 options.add_argument("--disable-gpu")
@@ -41,7 +40,7 @@ options.add_argument("--disable-features=VizDisplayCompositor")
 driver = None
 try:
     driver = webdriver.Chrome(options=options)
-    wait = WebDriverWait(driver, 25)
+    wait = WebDriverWait(driver, 40)  # increased wait time for React
 
     # --- LOGIN ---
     driver.get("https://www.chronogolf.com/login")
@@ -52,50 +51,44 @@ try:
     print("✅ Logged in successfully.")
 
     # --- LOAD TEE TIMES PAGE ---
-    print(f"⏳ Loading tee times for {date_str} ...")
-    # Two-step navigation ensures session is authenticated before loading times
     driver.get(f"https://www.chronogolf.com/club/miami-beach-golf-club?date={date_str}")
-    time.sleep(2)
     driver.get(club_url)
+    time.sleep(5)  # initial wait for React
 
-    try:
-        wait.until(
-            EC.presence_of_all_elements_located(
-                (By.XPATH, "//button[contains(., 'AM') or contains(., 'PM')]")
-            )
-        )
-        time.sleep(2)  # small grace delay
-        print("✅ Tee time buttons detected.")
-    except Exception:
-        print("⚠️ Tee time buttons not detected — page may still be loading.")
+    # Scroll to bottom to trigger lazy rendering
+    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+    time.sleep(1)
 
-    # --- Save for debugging ---
-    driver.save_screenshot("page_after_load.png")
-    with open("tee_times_page_source.html", "w", encoding="utf-8") as f:
-        f.write(driver.page_source)
-    print("🧩 Saved HTML + screenshot for debugging.")
+    # --- WAIT FOR TEE TIME ELEMENTS ---
+    tee_time_cards = []
+    for _ in range(5):  # retry 5 times
+        try:
+            tee_time_cards = driver.find_elements(By.CSS_SELECTOR, '[data-testid="tee-time-card"]')
+            tee_time_cards = [c for c in tee_time_cards if c.is_displayed()]
+            if tee_time_cards:
+                break
+        except:
+            pass
+        time.sleep(2)
 
-    # --- FIND AVAILABLE TIMES ---
-    tee_time_buttons = driver.find_elements(By.TAG_NAME, "button")
-    available_cards = [
-        b for b in tee_time_buttons
-        if b.is_displayed() and b.is_enabled() and ("AM" in b.text or "PM" in b.text)
-    ]
-
-    if not available_cards:
-        print("❌ No available tee times found.")
+    if not tee_time_cards:
+        print("❌ No tee times detected.")
+        driver.save_screenshot("no_tee_times.png")
+        with open("no_tee_times.html", "w", encoding="utf-8") as f:
+            f.write(driver.page_source)
         exit(0)
 
-    first_card = available_cards[0]
-    print(f"🎯 First available tee time: {first_card.text}")
+    print(f"🎯 Found {len(tee_time_cards)} tee time cards.")
+
+    # --- SELECT FIRST AVAILABLE TEE TIME ---
+    first_card = tee_time_cards[0]
     first_card.click()
+    print(f"✅ Selected first tee time.")
 
     # --- SELECT 18 HOLES ---
     try:
         hole_button = wait.until(
-            EC.element_to_be_clickable(
-                (By.CSS_SELECTOR, "button[type='button'][role='radio'][value='18']")
-            )
+            EC.element_to_be_clickable((By.CSS_SELECTOR, "button[type='button'][role='radio'][value='18']"))
         )
         hole_button.click()
         print("✅ Selected 18 holes.")
@@ -104,20 +97,17 @@ try:
 
     # --- ADD PLAYERS ---
     try:
-        player_buttons = driver.find_elements(By.CSS_SELECTOR, "button.e5zz781.e5zz780.e5zz782")
-        if player_buttons:
-            add_button = player_buttons[0]
-            for i in range(3):
-                if add_button.is_enabled():
-                    add_button.click()
+        add_buttons = driver.find_elements(By.CSS_SELECTOR, "button.e5zz781.e5zz780.e5zz782")
+        if add_buttons:
+            for i in range(3):  # add 3 players
+                if add_buttons[0].is_enabled():
+                    add_buttons[0].click()
                     time.sleep(0.3)
                     print(f"👥 Added player #{i + 2}")
-        else:
-            print("⚠️ No player add button found.")
     except Exception as e:
         print(f"⚠️ Player selection error: {e}")
 
-    # --- RESERVE BUTTON ---
+    # --- RESERVE ---
     try:
         reserve_button = wait.until(
             EC.element_to_be_clickable(
@@ -140,29 +130,29 @@ try:
             terms_checkbox.click()
         print("✅ Accepted terms and conditions.")
     except Exception:
-        print("⚠️ Could not find or click terms checkbox.")
+        print("⚠️ Terms checkbox not found.")
 
     # --- CONFIRM RESERVATION ---
     try:
         confirm_button = wait.until(
-            EC.element_to_be_clickable(
-                (By.XPATH, "//button[contains(text(),'Confirm Reservation')]")
-            )
+            EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Confirm Reservation')]"))
         )
         confirm_button.click()
         print("🎉 Confirmed reservation!")
     except Exception as e:
         print(f"⚠️ Confirm button not found or disabled: {e}")
 
+    # --- SAVE DEBUG ---
+    driver.save_screenshot("page_after_booking.png")
+    with open("page_after_booking.html", "w", encoding="utf-8") as f:
+        f.write(driver.page_source)
+
     print("✅ Script completed successfully.")
-    exit(0)
 
 except Exception as main_error:
     print("❌ Fatal error:", main_error)
     if driver:
         driver.save_screenshot("error_screenshot.png")
-    exit(1)
-
 finally:
     if driver:
         driver.quit()
