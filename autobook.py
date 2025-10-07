@@ -20,10 +20,7 @@ today = datetime.date.today()
 saturday = today + datetime.timedelta((5 - today.weekday()) % 7)
 date_str = saturday.strftime("%Y-%m-%d")
 
-club_url = (
-    f"https://www.chronogolf.com/club/miami-beach-golf-club"
-    f"?date={date_str}&step=teetimes&holes=&coursesIds=&deals=false&groupSize=0"
-)
+club_url = f"https://www.chronogolf.com/club/miami-beach-golf-club?date={date_str}&step=teetimes&holes=18&coursesIds=2be40f28-6aab-46ee-984b-c69e7c22d0ce&deals=false&groupSize=4"
 
 # --- Chrome setup ---
 tmpdir = tempfile.mkdtemp()
@@ -51,23 +48,20 @@ try:
     print("✅ Logged in successfully.")
 
     # --- LOAD TEE TIMES PAGE ---
-    driver.get(f"https://www.chronogolf.com/club/miami-beach-golf-club?date={date_str}")
     driver.get(club_url)
     time.sleep(5)  # initial wait for React
-
-    # Scroll to bottom to trigger lazy rendering
     driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
     time.sleep(1)
 
     # --- WAIT FOR TEE TIME ELEMENTS ---
     tee_time_cards = []
-    for _ in range(5):  # retry 5 times
+    for _ in range(8):  # more retries for React/lazy load
         try:
             tee_time_cards = driver.find_elements(By.CSS_SELECTOR, '[data-testid="teeTimeCard"]')
             tee_time_cards = [c for c in tee_time_cards if c.is_displayed()]
             if tee_time_cards:
                 break
-        except:
+        except Exception:
             pass
         time.sleep(2)
 
@@ -99,11 +93,11 @@ try:
     try:
         add_buttons = driver.find_elements(By.CSS_SELECTOR, "button.e5zz781.e5zz780.e5zz782")
         if add_buttons:
-            for i in range(3):  # add 3 players
+            for i in range(3):
                 if add_buttons[0].is_enabled():
                     add_buttons[0].click()
                     time.sleep(0.3)
-                    print(f"👥 Added player #{i + 2}")
+                    print(f"👥 Added player #{i+2}")
     except Exception as e:
         print(f"⚠️ Player selection error: {e}")
 
