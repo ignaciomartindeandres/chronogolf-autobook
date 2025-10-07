@@ -2,9 +2,9 @@ name: Auto Book Tee Time
 
 on:
   schedule:
-    # Every Monday at 04:01 UTC = 00:01 AM Eastern (approx 10s after midnight local)
+    # Every Monday at 04:01 UTC = 00:01 AM Eastern
     - cron: '1 4 * * 1'
-  workflow_dispatch:  # allow manual run
+  workflow_dispatch:  # allow manual runs
 
 jobs:
   book:
@@ -31,8 +31,8 @@ jobs:
       - name: Install Chrome & Chromedriver
         uses: nanasess/setup-chromedriver@v2
 
-      - name: Wait 10 seconds for tee times to open
-        run: sleep 10
+      - name: Wait 15 seconds before running script
+        run: sleep 15
 
       - name: Run booking script
         run: python autobook.py
@@ -43,6 +43,8 @@ jobs:
         with:
           name: debug-artifacts
           path: |
-            tee_times_page_source.html
-            page_after_load.png
+            page_after_booking.html
+            page_after_booking.png
             error_screenshot.png
+            no_tee_times.html
+            no_tee_times.png
