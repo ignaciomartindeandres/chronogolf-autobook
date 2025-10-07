@@ -30,7 +30,7 @@ driver.get("https://www.chronogolf.com/login")
 time.sleep(2)
 driver.find_element(By.ID, "sessionEmail").send_keys(EMAIL)
 driver.find_element(By.ID, "sessionPassword").send_keys(PWD)
-driver.find_element(By.NAME, "commit").click()
+driver.find_element(By.XPATH, "//input[@type='submit' and @value='Log in']").click()
 
 time.sleep(3)  # Wait for login
 
